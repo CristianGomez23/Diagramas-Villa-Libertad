@@ -1,0 +1,332 @@
+@startuml
+title Villa Libertad - Diagrama de Clases del Dominio
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+package "modules.user" #EAF4FB {
+  class User {
+    - id: UUID
+    - email: String
+    - name: String
+    - phone: String
+    - city: String
+    - password: String
+    - createdAt: LocalDateTime
+    - resetToken: String
+    - resetTokenExpiry: LocalDateTime
+    - roles: Set<Role>
+  }
+}
+
+package "modules.role" #EAF4FB {
+  class Role {
+    - id: UUID
+    - name: String
+    - users: Set<User>
+  }
+}
+
+package "modules.hotel" #FEF9E7 {
+  class Hotel {
+    - id: UUID
+    - name: String
+    - address: String
+    - urlImg: String
+    - description: String
+    - deleted: Boolean
+    - createdAt: LocalDateTime
+  }
+}
+
+package "modules.room" #FEF9E7 {
+  class Room {
+    - id: UUID
+    - hotel: Hotel
+    - name: String
+    - type: String
+    - description: String
+    - price: BigDecimal
+    - urlImg: String
+    - images: List<RoomImage>
+    - capacity: Integer
+    - deleted: Boolean
+    - status: RoomStatus
+    - roomNumber: String
+    - version: Long
+  }
+
+  class RoomImage {
+    - id: UUID
+    - room: Room
+    - url: String
+    - altText: String
+  }
+
+  enum RoomStatus {
+    AVAILABLE
+    OCCUPIED
+    RESERVED
+    MAINTENANCE
+    CLEANING
+    BLOCKED
+  }
+}
+
+package "modules.reservation" #E9F7EF {
+  class Reservation {
+    - id: UUID
+    - user: User
+    - hotel: Hotel
+    - room: Room
+    - numPersons: Long
+    - status: ReservationStatus
+    - checkIn: LocalDate
+    - checkOut: LocalDate
+    - reference: String
+    - total: BigDecimal
+    - deposit: BigDecimal
+    - createdAt: LocalDateTime
+    - cancelledAt: LocalDateTime
+    - checkedInAt: LocalDateTime
+    - checkedOutAt: LocalDateTime
+    - cancellationReason: String
+  }
+
+  enum ReservationStatus {
+    PENDING
+    CONFIRMED
+    CHECKED_IN
+    CHECKED_OUT
+    CANCELLED
+    NO_SHOW
+  }
+}
+
+package "modules.availability" #FEF9E7 {
+  class RoomAvailability {
+    - id: UUID
+    - room: Room
+    - startDate: LocalDate
+    - endDate: LocalDate
+    - status: AvailabilityStatus
+    - reason: String
+    - createdAt: LocalDateTime
+    - updatedAt: LocalDateTime
+    - version: Long
+  }
+
+  enum AvailabilityStatus {
+    AVAILABLE
+    BLOCKED
+    MAINTENANCE
+    EXTERNAL_BOOKING
+  }
+}
+
+package "modules.maintenance" #FDEDEC {
+  class MaintenanceRequest {
+    - id: UUID
+    - room: Room
+    - description: String
+    - status: MaintenanceStatus
+    - openedAt: LocalDateTime
+    - resolvedAt: LocalDateTime
+    - resolutionNotes: String
+  }
+
+  enum MaintenanceStatus {
+    OPEN
+    IN_PROGRESS
+    RESOLVED
+  }
+}
+
+package "modules.hotelservice" #FEF9E7 {
+  class HotelService {
+    - id: UUID
+    - name: String
+    - description: String
+    - price: BigDecimal
+    - included: Boolean
+    - active: Boolean
+    - hotel: Hotel
+  }
+}
+
+package "modules.promotion" #F9EBEA {
+  class Promotion {
+    - id: UUID
+    - name: String
+    - description: String
+    - discountType: PromotionDiscountType
+    - value: BigDecimal
+    - startDate: LocalDate
+    - endDate: LocalDate
+    - active: Boolean
+    - couponCode: String
+    - minNights: Integer
+    - createdAt: LocalDateTime
+  }
+
+  enum PromotionDiscountType {
+    PERCENTAGE
+    FIXED_AMOUNT
+  }
+}
+
+package "modules.pricing" #F9EBEA {
+  class SeasonRate {
+    - id: UUID
+    - name: String
+    - startDate: LocalDate
+    - endDate: LocalDate
+    - multiplier: BigDecimal
+    - active: Boolean
+    - description: String
+    - createdAt: LocalDateTime
+  }
+
+  class RoomSpecificRate {
+    - id: UUID
+    - room: Room
+    - customPrice: BigDecimal
+    - startDate: LocalDate
+    - endDate: LocalDate
+    - reason: String
+    - active: Boolean
+  }
+
+  enum DiscountType {
+    PERCENTAGE
+    FIXED_AMOUNT
+  }
+}
+
+package "modules.payment" #E8F8F5 {
+  class PaymentTransaction {
+    - id: String
+    - amountInCents: Long
+    - reference: String
+    - customerEmail: String
+    - currency: String
+    - paymentMethodType: String
+    - redirectUrl: String
+    - status: String
+    - environment: String
+    - paymentLinkId: String
+    - paymentSourceId: String
+    - timestamp: Long
+  }
+}
+
+package "modules.notification" #EBF5FB {
+  class EmailContext {
+    - guestName: String
+    - reservationReference: String
+    - checkIn: LocalDate
+    - checkOut: LocalDate
+    - roomName: String
+    - hotelName: String
+    - total: BigDecimal
+  }
+
+  enum NotificationType {
+    RESERVATION_CONFIRMED
+    RESERVATION_CANCELLED
+    CHECK_IN_REMINDER
+    CHECK_OUT_REMINDER
+    PASSWORD_RESET
+  }
+}
+
+package "modules.review" #F5EEF8 {
+  class HotelReview {
+    - id: UUID
+    - hotel: Hotel
+    - user: User
+    - name: String
+    - rating: Integer
+    - comment: String
+    - createdAt: LocalDateTime
+  }
+}
+
+package "modules.audit" #F2F3F4 {
+  class AuditLog {
+    - id: UUID
+    - action: AuditAction
+    - actorEmail: String
+    - entityType: String
+    - entityId: String
+    - detail: String
+    - success: Boolean
+    - createdAt: LocalDateTime
+  }
+
+  enum AuditAction {
+    AUTH_LOGIN
+    AUTH_LOGOUT
+    AUTH_PASSWORD_RESET_REQUEST
+    AUTH_PASSWORD_RESET_SUCCESS
+    RESERVATION_CREATED
+    RESERVATION_CONFIRMED
+    RESERVATION_CANCELLED
+    RESERVATION_CHECKIN
+    RESERVATION_CHECKOUT
+    PAYMENT_RECEIVED
+    PAYMENT_FAILED
+    ADMIN_ROOM_CREATED
+    ADMIN_ROOM_UPDATED
+    ADMIN_ROOM_DELETED
+    ADMIN_GENERIC
+  }
+}
+
+
+' User ↔ Role (many-to-many)
+User "0..*" -- "0..*" Role : roles
+
+' Hotel → Room / HotelService
+Hotel "1" --> "0..*" Room          : habitaciones
+Hotel "1" --> "0..*" HotelService  : servicios
+
+' Room → imágenes / disponibilidad / mantenimiento / tarifas
+Room "1" --> "0..*" RoomImage         : imagenes
+Room "1" --> "0..*" RoomAvailability  : bloqueos
+Room "1" --> "0..*" MaintenanceRequest : mantenimientos
+Room "1" --> "0..*" RoomSpecificRate  : tarifas especificas
+Room --> RoomStatus
+
+' Reservation (agregado principal)
+User        "1"    --> "0..*" Reservation  : realiza
+Hotel       "1"    --> "0..*" Reservation  : recibe
+Room        "1"    --> "0..*" Reservation  : reservada en
+Reservation         -->       ReservationStatus
+
+' PaymentTransaction vinculada a Reservation por referencia
+PaymentTransaction "0..*" ..> Reservation : reference
+
+' RoomAvailability
+RoomAvailability --> AvailabilityStatus
+
+' Maintenance
+MaintenanceRequest --> MaintenanceStatus
+
+' Promotion y pricing
+Promotion --> PromotionDiscountType
+RoomSpecificRate --> DiscountType
+
+' Review → Hotel & User (relaciones faltantes en diagrama original)
+HotelReview "0..*" --> "1" Hotel : sobre
+HotelReview "0..*" --> "1" User  : escrita por
+
+' Notification → Reservation (contexto de correo)
+EmailContext "0..*" ..> Reservation : generado desde
+EmailContext --> NotificationType
+
+' Audit
+AuditLog --> AuditAction
+
+@enduml

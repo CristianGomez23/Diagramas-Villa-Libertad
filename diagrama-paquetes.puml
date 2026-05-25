@@ -1,0 +1,55 @@
+@startuml
+title Villa Libertad - Diagrama de Paquetes
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "com.edu.uptc.villa_libertad" as app {
+  package "modules" as modules {
+    package "admin" as admin
+    package "audit" as audit
+    package "auth" as auth
+    package "availability" as availability
+    package "hotel" as hotel
+    package "hotelservice" as hotelservice
+    package "maintenance" as maintenance
+    package "notification" as notification
+    package "payment" as payment
+    package "pricing" as pricing
+    package "promotion" as promotion
+    package "reporting" as reporting
+    package "reservation" as reservation
+    package "review" as review
+    package "role" as role
+    package "room" as room
+    package "user" as user
+  }
+
+}
+
+auth ..> user : registra/autentica
+user ..> role : asigna roles
+room ..> hotel : pertenece a
+hotelservice ..> hotel : servicios del hotel
+reservation ..> user : cliente
+reservation ..> hotel : hotel reservado
+reservation ..> room : habitacion reservada
+reservation ..> availability : valida fechas
+reservation ..> maintenance : valida mantenimiento
+reservation ..> notification : envia eventos
+reservation ..> audit : registra auditoria
+
+availability ..> room : bloquea/desbloquea
+maintenance ..> room : solicitudes
+pricing ..> room : calcula precio
+pricing ..> hotelservice : servicios incluidos/adicionales
+pricing ..> promotion : descuentos
+payment ..> reservation : confirma/cancela por pago
+payment ..> room : libera habitacion
+payment ..> notification : confirma reserva
+payment ..> audit : transacciones
+reporting ..> reservation : reportes
+reporting ..> room : ocupacion
+admin ..> reservation : snapshots/dashboard
+admin ..> room : conteos/dashboard
+review ..> hotel : resenas
+@enduml

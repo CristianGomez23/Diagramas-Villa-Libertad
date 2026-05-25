@@ -1,0 +1,684 @@
+@startuml
+title Villa Libertad - Diagrama de Clases del Negocio
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+' ═══════════════════════════════════════════════════════════════
+' SHARED — Seguridad, Config y Excepciones
+' ═══════════════════════════════════════════════════════════════
+
+package "shared.security" #F2F3F4 {
+
+  class SecurityConfig <<Configuration>> {
+    - oAuth2SuccessHandler: CustomOAuth2SuccessHandler
+    - jwtFilter: JwtAuthenticationFilter
+    + filterChain(http: HttpSecurity): SecurityFilterChain
+  }
+
+  class JwtAuthenticationFilter <<Component>> {
+    # doFilterInternal(req, res, chain): void
+    # shouldNotFilter(req: HttpServletRequest): boolean
+  }
+
+  class CustomOAuth2SuccessHandler <<Component>> {
+    - userService: UserService
+    - roleService: RoleService
+    - auditService: AuditService
+    - frontendUrl: String
+    + onAuthenticationSuccess(req, res, auth): void
+  }
+}
+
+package "shared.utils" #F2F3F4 {
+  class JwtUtil <<Utility>> {
+    + {static} generateAccessToken(name, pic, email, roles): String
+    + {static} generateRefreshToken(email, name, pic): String
+    + {static} validateToken(token: String): boolean
+    + {static} getClaimsFromToken(token: String): Claims
+  }
+}
+
+package "shared.config" #F2F3F4 {
+  class AsyncConfig <<Configuration>> {
+    + notificationExecutor(): Executor
+    + auditExecutor(): Executor
+  }
+
+  class WebConfig <<Configuration>> {
+    - frontendUrl: String
+    + corsConfigurer(): WebMvcConfigurer
+  }
+
+  class DatabaseSeeder <<Configuration>> {
+    + seedRoles(roles, users): CommandLineRunner
+    + seedHotel(hotels, rooms): CommandLineRunner
+  }
+}
+
+package "shared.exceptions" #F2F3F4 {
+  class GlobalExceptionHandler <<RestControllerAdvice>> {
+    + handleNotFound(e: ResourceNotFoundException): ResponseEntity
+    + handleBadRequest(e: BadRequestException): ResponseEntity
+    + handleUnauthorized(e: UnauthorizedException): ResponseEntity
+    + handleOptimisticLock(e: Exception): ResponseEntity
+    + handlePessimisticLock(e: Exception): ResponseEntity
+    + handleValidation(e: MethodArgumentNotValidException): ResponseEntity
+    + handleGeneric(e: Exception): ResponseEntity
+  }
+
+  class BadRequestException {
+    + BadRequestException(message: String)
+  }
+
+  class ResourceNotFoundException {
+    + ResourceNotFoundException(message: String)
+  }
+
+  class UnauthorizedException {
+    + UnauthorizedException(message: String)
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: admin (Dashboard)
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.admin" #EAF4FB {
+
+  class DashboardController {
+    - service: DashboardService
+    + dashboard(): ResponseEntity
+  }
+
+  class DashboardService {
+    - roomRepo: DashboardRoomRepository
+    - reservationRepo: DashboardReservationRepository
+    + buildDashboard(): DashboardDto
+  }
+
+  interface DashboardReservationRepository {
+    + findPendingCheckInsToday(today: LocalDate): List<Reservation>
+    + countCompletedCheckInsToday(today: LocalDate): long
+    + findUpcomingCheckOutsToday(today: LocalDate): List<Reservation>
+    + countCompletedCheckOutsToday(today: LocalDate): long
+    + sumRevenueTodayByTimestamp(start: LocalDateTime, end: LocalDateTime): BigDecimal
+    + countReservationsToday(today: LocalDate): long
+    + countNewReservationsToday(start: LocalDateTime, end: LocalDateTime): long
+  }
+
+  interface DashboardRoomRepository {
+    + findAllActive(): List<Room>
+    + countByStatus(): List<Object[]>
+    + countActive(): int
+    + countByStatusValue(status: RoomStatus): int
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: audit
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.audit" #F2F3F4 {
+
+  class AuditController {
+    - service: AuditService
+    + search(actorEmail, action, entityType, entityId, from, to, page, size): ResponseEntity
+  }
+
+  class AuditService {
+    - repo: AuditLogRepository
+    + record(action, actorEmail, entityType, entityId, detail, success): void
+    + success(action, actorEmail, entityType, entityId, detail): void
+    + failure(action, actorEmail, entityType, entityId, detail): void
+    + search(req: AuditSearchRequest): AuditPageResponse
+    + findByActor(email: String): List<AuditLog>
+    + findByEntity(entityType: String, entityId: String): List<AuditLog>
+  }
+
+  interface AuditLogRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: auth
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.auth" #EAF4FB {
+
+  class AuthController {
+    - authService: AuthService
+    - userService: UserService
+    + register(req: UserDto): ResponseEntity
+    + login(req: LoginRequest): ResponseEntity
+    + forgotPassword(req: ForgotPasswordRequest): ResponseEntity
+    + resetPassword(req: ResetPasswordRequest): ResponseEntity
+  }
+
+  class AuthService {
+    - userRepo: UserRepository
+    - passwordEncoder: BCryptPasswordEncoder
+    + login(email: String, password: String): Map<String, String>
+    + generateResetToken(email: String): String
+    + resetPassword(plainToken: String, newPassword: String): void
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: availability
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.availability" #FEF9E7 {
+
+  class AvailabilityController {
+    - service: AvailabilityService
+    + block(req: AvailabilityBlockRequest): ResponseEntity
+    + unblock(blockId: UUID): ResponseEntity
+    + calendar(roomId: UUID): ResponseEntity
+    + byRange(roomId: UUID, from: LocalDate, to: LocalDate): ResponseEntity
+  }
+
+  class AvailabilityService {
+    - availRepo: RoomAvailabilityRepository
+    - roomRepo: RoomRepository
+    + blockDates(req: AvailabilityBlockRequest): RoomAvailability
+    + unblockDates(blockId: UUID): void
+    + getCalendar(roomId: UUID): List<RoomAvailability>
+    + getByRoomAndRange(roomId: UUID, from: LocalDate, to: LocalDate): List<RoomAvailability>
+    + assertDatesAreAvailable(roomId: UUID, checkIn: LocalDate, checkOut: LocalDate): void
+  }
+
+  interface RoomAvailabilityRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: hotel
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.hotel" #FEF9E7 {
+
+  class HotelController {
+    - hotelService: HotelService
+    + getAll(): ResponseEntity<List<Hotel>>
+    + save(dto: HotelDto): ResponseEntity<HotelDto>
+  }
+
+  class HotelService {
+    - repo: HotelRepository
+    + saveHotel(dto: HotelDto): Hotel
+    + findAllHotels(): List<Hotel>
+  }
+
+  interface HotelRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: hotelservice
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.hotelservice" #FEF9E7 {
+
+  class HotelServiceController {
+    - service: HotelServiceManager
+    + create(dto: HotelServiceDto): ResponseEntity
+    + update(id: UUID, dto: HotelServiceDto): ResponseEntity
+    + deactivate(id: UUID): ResponseEntity
+    + byHotel(hotelId: UUID): ResponseEntity
+    + getById(id: UUID): ResponseEntity
+  }
+
+  class HotelServiceManager {
+    - repo: HotelServiceRepository
+    - hotelRepo: HotelRepository
+    + create(dto: HotelServiceDto): HotelService
+    + update(id: UUID, dto: HotelServiceDto): HotelService
+    + deactivate(id: UUID): void
+    + findById(id: UUID): HotelService
+    + findByHotel(hotelId: UUID): List<HotelService>
+    + findAll(): List<HotelService>
+  }
+
+  interface HotelServiceRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: maintenance
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.maintenance" #FDEDEC {
+
+  class MaintenanceController {
+    - service: MaintenanceService
+    + open(dto: MaintenanceRequestDto): ResponseEntity
+    + start(id: UUID): ResponseEntity
+    + resolve(id: UUID, dto: MaintenanceResolveDto): ResponseEntity
+    + listAll(status: MaintenanceStatus): ResponseEntity
+    + byRoom(roomId: UUID): ResponseEntity
+    + getById(id: UUID): ResponseEntity
+  }
+
+  class MaintenanceService {
+    - repo: MaintenanceRepository
+    - roomRepo: RoomRepository
+    + openRequest(dto: MaintenanceRequestDto): MaintenanceRequest
+    + startWork(requestId: UUID): MaintenanceRequest
+    + resolveRequest(requestId: UUID, dto: MaintenanceResolveDto): MaintenanceRequest
+    + findByRoom(roomId: UUID): List<MaintenanceRequest>
+    + findByStatus(status: MaintenanceStatus): List<MaintenanceRequest>
+    + findAll(): List<MaintenanceRequest>
+    + findById(id: UUID): MaintenanceRequest
+    + hasActiveMaintenance(roomId: UUID): boolean
+  }
+
+  interface MaintenanceRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: notification
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.notification" #EBF5FB {
+
+  class NotificationService {
+    - mailSender: JavaMailSender
+    - templateEngine: TemplateEngine
+    + onReservationConfirmed(reservation: Reservation): void
+    + onReservationCancelled(reservation: Reservation, reason: String): void
+    + onCheckInReminder(reservation: Reservation): void
+    + onCheckOutCompleted(reservation: Reservation): void
+    + send(ctx: EmailContext): void
+  }
+
+  class ReminderScheduler {
+    - reservationRepo: ReservationRepository
+    - notificationService: NotificationService
+    + sendCheckInReminders(): void
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: payment
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.payment" #E8F8F5 {
+
+  class WompiController {
+    - mapper: ObjectMapper
+    - service: PaymentTransactionService
+    - secret: String
+    - eventKey: String
+    + signature(req: WompiRequest): SignatureResponse
+    + event(body: String): ResponseEntity
+    - sha256(input: String): String
+  }
+
+  class PaymentTransactionService {
+    - repo: PaymentTransactionRepository
+    - reservations: ReservationRepository
+    - rooms: RoomRepository
+    - notificationService: NotificationService
+    - auditService: AuditService
+    + upsertTransaction(data: JsonNode, env: String, ts: long): void
+    - applyPaymentStatus(reservation: Reservation, status: String): void
+    - isFailedPaymentStatus(status: String): boolean
+  }
+
+  interface PaymentTransactionRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: pricing
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.pricing" #F9EBEA {
+
+  class PricingController {
+    - service: PricingService
+    + calculate(roomId: UUID, checkIn: LocalDate, checkOut: LocalDate, coupon: String): ResponseEntity
+    + createSeasonRate(dto: SeasonRateDto): ResponseEntity
+    + updateSeasonRate(id: UUID, dto: SeasonRateDto): ResponseEntity
+    + getSeasonRates(activeOnly: boolean): ResponseEntity
+    + deleteSeasonRate(id: UUID): ResponseEntity
+    + createRoomRate(dto: RoomSpecificRateDto): ResponseEntity
+    + getRoomRates(roomId: UUID): ResponseEntity
+    + deleteRoomRate(id: UUID): ResponseEntity
+  }
+
+  class PricingService {
+    - seasonRateRepo: SeasonRateRepository
+    - specificRateRepo: RoomSpecificRateRepository
+    - promotionRepo: PromotionRepository
+    - serviceRepo: HotelServiceRepository
+    - roomRepo: RoomRepository
+    + calculatePrice(roomId: UUID, checkIn: LocalDate, checkOut: LocalDate, coupon: String): PriceBreakdownDto
+    + createSeasonRate(dto: SeasonRateDto): SeasonRate
+    + updateSeasonRate(id: UUID, dto: SeasonRateDto): SeasonRate
+    + getAllSeasonRates(): List<SeasonRate>
+    + getActiveSeasonRates(): List<SeasonRate>
+    + deleteSeasonRate(id: UUID): void
+    + createRoomRate(dto: RoomSpecificRateDto): RoomSpecificRate
+    + getRoomRates(roomId: UUID): List<RoomSpecificRate>
+    + deleteRoomRate(id: UUID): void
+  }
+
+  interface SeasonRateRepository
+  interface RoomSpecificRateRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: promotion
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.promotion" #F9EBEA {
+
+  class PromotionController {
+    - service: PromotionService
+    + create(dto: PromotionDto): ResponseEntity
+    + update(id: UUID, dto: PromotionDto): ResponseEntity
+    + deactivate(id: UUID): ResponseEntity
+    + list(activeOnly: boolean): ResponseEntity
+    + getById(id: UUID): ResponseEntity
+    + applicable(checkIn: LocalDate, checkOut: LocalDate, coupon: String): ResponseEntity
+  }
+
+  class PromotionService {
+    - repo: PromotionRepository
+    + create(dto: PromotionDto): Promotion
+    + update(id: UUID, dto: PromotionDto): Promotion
+    + deactivate(id: UUID): void
+    + findAll(): List<Promotion>
+    + findAllActive(): List<Promotion>
+    + findById(id: UUID): Promotion
+    + findApplicable(checkIn: LocalDate, checkOut: LocalDate, coupon: String): List<Promotion>
+  }
+
+  interface PromotionRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: reporting
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.reporting" #EAF4FB {
+
+  class ReportingController {
+    - service: ReportingService
+    + occupancy(from: LocalDate, to: LocalDate): ResponseEntity
+    + revenue(from: LocalDate, to: LocalDate): ResponseEntity
+    + reservations(from: LocalDate, to: LocalDate, status: String): ResponseEntity
+    + cancellations(from: LocalDate, to: LocalDate): ResponseEntity
+  }
+
+  class ReportingService {
+    - reservationRepo: ReportingReservationRepository
+    - roomRepo: ReportingRoomRepository
+    + occupancyReport(from: LocalDate, to: LocalDate): OccupancyReportDto
+    + revenueReport(from: LocalDate, to: LocalDate): RevenueReportDto
+    + reservationsReport(from: LocalDate, to: LocalDate, status: String): ReservationsReportDto
+    + cancellationReport(from: LocalDate, to: LocalDate): CancellationReportDto
+    - validateRange(from: LocalDate, to: LocalDate): void
+  }
+
+  interface ReportingReservationRepository {
+    + findActiveInPeriod(from: LocalDate, to: LocalDate): List<Reservation>
+    + countCurrentlyCheckedIn(from: LocalDate, to: LocalDate): long
+    + sumRealizedRevenue(from: LocalDate, to: LocalDate): BigDecimal
+    + sumProjectedRevenue(from: LocalDate, to: LocalDate): BigDecimal
+    + countCompleted(from: LocalDate, to: LocalDate): long
+    + countProjected(from: LocalDate, to: LocalDate): long
+    + findForReservationsReport(from, to, status): List<Reservation>
+    + findCancellationsInPeriod(from: LocalDate, to: LocalDate): List<Reservation>
+    + sumRevenueLost(from: LocalDate, to: LocalDate): BigDecimal
+    + countAllInPeriod(from: LocalDate, to: LocalDate): long
+  }
+
+  interface ReportingRoomRepository {
+    + countActiveRooms(): int
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: reservation
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.reservation" #E9F7EF {
+
+  class ReservationController {
+    - reservationService: ReservationService
+    - userService: UserService
+    + save(dto: ReservationDto, auth: String): ResponseEntity
+    + getByEmail(email: String, auth: String): ResponseEntity
+    + history(email, auth, status, roomId, from, to): ResponseEntity
+    + cancel(id: UUID, auth: String, reason: String): ResponseEntity
+    + checkIn(id: UUID): ResponseEntity
+    + checkOut(id: UUID): ResponseEntity
+    - subjectFromAuth(auth: String): String
+  }
+
+  class ReservationService {
+    - repo: ReservationRepository
+    - users: UserRepository
+    - hotels: HotelRepository
+    - rooms: RoomRepository
+    - availabilityService: AvailabilityService
+    - maintenanceService: MaintenanceService
+    - notificationService: NotificationService
+    - auditService: AuditService
+    + saveReservation(dto: ReservationDto): Reservation
+    + cancelReservation(id: UUID, reason: String): Reservation
+    + checkIn(id: UUID): Reservation
+    + checkOut(id: UUID): Reservation
+    + findConfirmedByUserId(userId: UUID): List<Reservation>
+    + findAllByUserId(userId: UUID): List<Reservation>
+    + findById(id: UUID): Reservation
+    + findWithFilters(userId, status, roomId, from, to): List<Reservation>
+    - validateBusinessRules(dto: ReservationDto): void
+  }
+
+  interface ReservationRepository {
+    + findByReference(ref: String): Optional<Reservation>
+    + findOverlapping(roomId, checkIn, checkOut): List<Reservation>
+    + findByUserId(userId: UUID): List<Reservation>
+    + findByUserIdAndStatus(userId, status): List<Reservation>
+    + findWithFilters(userId, status, roomId, from, to): List<Reservation>
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: review
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.review" #F5EEF8 {
+
+  class HotelReviewController {
+    - service: HotelReviewService
+    + save(review: HotelReview): ResponseEntity<HotelReview>
+  }
+
+  class HotelReviewService {
+    - repo: HotelReviewRepository
+    + save(review: HotelReview): HotelReview
+  }
+
+  interface HotelReviewRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: role
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.role" #EAF4FB {
+
+  class RoleController {
+    - roleService: RoleService
+    + createRole(roleName: String): ResponseEntity<Role>
+  }
+
+  class RoleService {
+    - repo: RoleRepository
+    + saveRole(name: String): Role
+    + findRoleByName(name: String): Role
+  }
+
+  interface RoleRepository
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: room
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.room" #FEF9E7 {
+
+  class RoomController {
+    - roomService: RoomService
+    - pricingService: PricingService
+    + available(checkIn: LocalDate, checkOut: LocalDate, guests: int, coupon: String): ResponseEntity
+    + byHotel(id: UUID): ResponseEntity
+    + save(dto: RoomDto): ResponseEntity
+    + update(id: UUID, dto: RoomDto): ResponseEntity
+    + delete(id: UUID): ResponseEntity
+  }
+
+  class RoomService {
+    - roomRepo: RoomRepository
+    - hotelRepo: HotelRepository
+    + saveRoom(dto: RoomDto): Room
+    + updateRoom(id: UUID, dto: RoomDto): Room
+    + softDeleteRoom(id: UUID): void
+    + findAllRoomsByHotelId(id: UUID): List<Room>
+    + findActiveById(id: UUID): Room
+    + findAvailableRooms(start: LocalDate, end: LocalDate, guests: int): List<Room>
+    - validatePrice(price: BigDecimal): void
+  }
+
+  interface RoomRepository {
+    + findByIdAndDeletedFalse(id: UUID): Optional<Room>
+    + existsByNameAndHotel(name: String, hotel: Hotel): boolean
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' MÓDULO: user
+' ═══════════════════════════════════════════════════════════════
+
+package "modules.user" #EAF4FB {
+
+  class UserController {
+    - userService: UserService
+    + getById(id: UUID): ResponseEntity<User>
+    + saveUser(dto: UserDto, auth: String): ResponseEntity
+    + refresh(rt: String): ResponseEntity
+  }
+
+  class UserService {
+    - repo: UserRepository
+    - roleService: RoleService
+    - passwordEncoder: BCryptPasswordEncoder
+    + saveUser(dto: UserDto): User
+    + findRolesByUserEmail(email: String): Set<Role>
+    + findUserById(id: UUID): User
+    + findUserByEmail(email: String): User
+  }
+
+  interface UserRepository {
+    + findByEmail(email: String): Optional<User>
+    + findByResetTokenExpiryAfter(date: LocalDateTime): List<User>
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+' RELACIONES — Controllers → Services
+' ═══════════════════════════════════════════════════════════════
+
+DashboardController    --> DashboardService
+AuditController        --> AuditService
+AuthController         --> AuthService
+AuthController         --> UserService
+AvailabilityController --> AvailabilityService
+HotelController        --> HotelService
+HotelServiceController --> HotelServiceManager
+MaintenanceController  --> MaintenanceService
+WompiController        --> PaymentTransactionService
+PricingController      --> PricingService
+PromotionController    --> PromotionService
+ReportingController    --> ReportingService
+ReservationController  --> ReservationService
+ReservationController  --> UserService
+HotelReviewController  --> HotelReviewService
+RoleController         --> RoleService
+RoomController         --> RoomService
+RoomController         --> PricingService
+UserController         --> UserService
+
+' ═══════════════════════════════════════════════════════════════
+' RELACIONES — Services → Repositories
+' ═══════════════════════════════════════════════════════════════
+
+DashboardService        --> DashboardReservationRepository
+DashboardService        --> DashboardRoomRepository
+AuditService            --> AuditLogRepository
+AuthService             --> UserRepository
+AuthService             --> JwtUtil
+AvailabilityService     --> RoomAvailabilityRepository
+AvailabilityService     --> RoomRepository
+HotelService            --> HotelRepository
+HotelServiceManager     --> HotelServiceRepository
+HotelServiceManager     --> HotelRepository
+MaintenanceService      --> MaintenanceRepository
+MaintenanceService      --> RoomRepository
+PricingService          --> SeasonRateRepository
+PricingService          --> RoomSpecificRateRepository
+PricingService          --> PromotionRepository
+PricingService          --> HotelServiceRepository
+PricingService          --> RoomRepository
+PromotionService        --> PromotionRepository
+ReportingService        --> ReportingReservationRepository
+ReportingService        --> ReportingRoomRepository
+ReservationService      --> ReservationRepository
+ReservationService      --> UserRepository
+ReservationService      --> HotelRepository
+ReservationService      --> RoomRepository
+HotelReviewService      --> HotelReviewRepository
+RoleService             --> RoleRepository
+RoomService             --> RoomRepository
+RoomService             --> HotelRepository
+UserService             --> UserRepository
+UserService             --> RoleService
+PaymentTransactionService --> PaymentTransactionRepository
+PaymentTransactionService --> ReservationRepository
+PaymentTransactionService --> RoomRepository
+
+' ═══════════════════════════════════════════════════════════════
+' RELACIONES — Services entre sí (dependencias cruzadas)
+' ═══════════════════════════════════════════════════════════════
+
+ReservationService      --> AvailabilityService
+ReservationService      --> MaintenanceService
+ReservationService      --> NotificationService
+ReservationService      --> AuditService
+PaymentTransactionService --> NotificationService
+PaymentTransactionService --> AuditService
+ReminderScheduler       --> NotificationService
+ReminderScheduler       --> ReservationRepository
+
+' ═══════════════════════════════════════════════════════════════
+' RELACIONES — Seguridad y Config
+' ═══════════════════════════════════════════════════════════════
+
+SecurityConfig              --> JwtAuthenticationFilter
+SecurityConfig              --> CustomOAuth2SuccessHandler
+JwtAuthenticationFilter     ..> JwtUtil
+CustomOAuth2SuccessHandler  --> UserService
+CustomOAuth2SuccessHandler  --> RoleService
+CustomOAuth2SuccessHandler  --> AuditService
+CustomOAuth2SuccessHandler  ..> JwtUtil
+
+' ═══════════════════════════════════════════════════════════════
+' RELACIONES — Excepciones
+' ═══════════════════════════════════════════════════════════════
+
+GlobalExceptionHandler ..> BadRequestException
+GlobalExceptionHandler ..> ResourceNotFoundException
+GlobalExceptionHandler ..> UnauthorizedException
+
+@enduml
