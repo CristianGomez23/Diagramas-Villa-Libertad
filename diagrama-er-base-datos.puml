@@ -1,0 +1,190 @@
+@startuml
+title Villa Libertad - Diagrama E-R de Base de Datos
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+
+entity "users" as users {
+  * id : UUID <<PK>>
+  --
+  email : varchar <<UK>>
+  name : varchar
+  phone : varchar <<UK>>
+  city : varchar
+  password : varchar
+  created_at : timestamp
+  reset_token : varchar
+  reset_token_expiry : timestamp
+}
+
+entity "roles" as roles {
+  * id : UUID <<PK>>
+  --
+  name : varchar <<UK>>
+}
+
+entity "user_roles" as user_roles {
+  * user_id : UUID <<PK, FK>>
+  * role_id : UUID <<PK, FK>>
+}
+
+entity "hotels" as hotels {
+  * id : UUID <<PK>>
+  --
+  name : varchar <<UK>>
+  address : varchar
+  url_img : varchar <<UK>>
+  description : varchar
+  deleted : boolean
+  created_at : timestamp
+}
+
+entity "rooms" as rooms {
+  * id : UUID <<PK>>
+  --
+  hotel_id : UUID <<FK>>
+  name : varchar <<UK>>
+  type : varchar
+  description : varchar
+  price : numeric
+  url_img : varchar
+  capacity : integer
+  deleted : boolean
+  status : varchar
+  room_number : varchar
+  version : bigint
+}
+
+entity "room_images" as room_images {
+  * id : UUID <<PK>>
+  --
+  room_id : UUID <<FK>>
+  url : varchar
+}
+
+entity "reservations" as reservations {
+  * id : UUID <<PK>>
+  --
+  user_id : UUID <<FK>>
+  hotel_id : UUID <<FK>>
+  room_id : UUID <<FK>>
+  num_persons : bigint
+  status : varchar
+  check_in : date
+  check_out : date
+  reference : varchar <<UK>>
+  total : numeric
+  deposit : numeric
+  created_at : timestamp
+  cancelled_at : timestamp
+  checked_in_at : timestamp
+  checked_out_at : timestamp
+  cancellation_reason : varchar
+}
+
+entity "room_availability" as room_availability {
+  * id : UUID <<PK>>
+  --
+  room_id : UUID <<FK>>
+  start_date : date
+  end_date : date
+  status : varchar
+  reason : varchar
+  created_at : timestamp
+  updated_at : timestamp
+  version : bigint
+}
+
+entity "maintenance_requests" as maintenance_requests {
+  * id : UUID <<PK>>
+  --
+  room_id : UUID <<FK>>
+  description : varchar
+  status : varchar
+  opened_at : timestamp
+  resolved_at : timestamp
+  resolution_notes : varchar
+}
+
+entity "hotel_services" as hotel_services {
+  * id : UUID <<PK>>
+  --
+  hotel_id : UUID <<FK>>
+  name : varchar
+  description : varchar
+  price : numeric
+  active : boolean
+  included : boolean
+}
+
+entity "room_specific_rates" as room_specific_rates {
+  * id : UUID <<PK>>
+  --
+  room_id : UUID <<FK>>
+  custom_price : numeric
+  start_date : date
+  end_date : date
+  reason : varchar
+  active : boolean
+}
+
+entity "payment_transactions" as payment_transactions {
+  * id : varchar <<PK>>
+  --
+  amount_in_cents : bigint
+  reference : varchar
+  customer_email : varchar
+  currency : varchar
+  payment_method_type : varchar
+  redirect_url : varchar
+  status : varchar
+  environment : varchar
+  payment_link_id : varchar
+  payment_source_id : varchar
+  timestamp : bigint
+}
+
+entity "audit_logs" as audit_logs {
+  * id : UUID <<PK>>
+  --
+  action : varchar
+  actor_email : varchar
+  entity_type : varchar
+  entity_id : varchar
+  description : varchar
+  ip_address : varchar
+  user_agent : varchar
+  success : boolean
+  created_at : timestamp
+}
+
+entity "hotel_reviews" as hotel_reviews {
+  * id : UUID <<PK>>
+  --
+  hotel_id : UUID <<FK>>
+  overall_rating : integer
+  cleanliness_rating : integer
+  staff_rating : integer
+  facilities_rating : integer
+  value_rating : integer
+  would_recommend : varchar
+  best_aspect : varchar
+  improvement_suggestion : varchar
+  additional_comments : varchar
+  created_at : timestamp
+}
+
+users ||--o{ user_roles : tiene
+roles ||--o{ user_roles : asignado
+hotels ||--o{ rooms : contiene
+hotels ||--o{ hotel_services : ofrece
+users ||--o{ reservations : realiza
+hotels ||--o{ reservations : recibe
+rooms ||--o{ reservations : reservada
+rooms ||--o{ room_images : imagenes
+rooms ||--o{ room_availability : disponibilidad
+rooms ||--o{ maintenance_requests : mantenimiento
+rooms ||--o{ room_specific_rates : tarifa_especifica
+reservations ||--o{ payment_transactions : pagos
+hotels ||--o{ hotel_reviews : resenas
+@enduml
